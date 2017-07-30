@@ -97,12 +97,18 @@ var parse = function(str) {
     return str.replace(/~cmd.*$/gmi, '');
 };
 
+var onStop = function() {
+    setTimeout(function() {
+        window.location.href = "//jhoughton.me";
+    }, 4000);
+};
+
 var start = function() {
     parsedString = parse(commandString);
     var length = parsedString.length;
     var place = 0;
     var step = function() {
-        if(place >= length) return;
+        if(place >= length) return onStop();
         var finishFunction = function(indexChange) {
             if(indexChange) {
                 place += indexChange;
