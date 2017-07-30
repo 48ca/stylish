@@ -98,6 +98,7 @@ var parse = function(str) {
 };
 
 var onStop = function() {
+    document.title = "Good-looking page :)"
     setTimeout(function() {
         window.location.href = "//jhoughton.me";
     }, 4000);
