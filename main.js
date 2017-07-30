@@ -2,8 +2,12 @@
 var head;
 var style;
 var styleShowEl;
+var parsedString;
 var commandString;
 var highlight;
+var charInterval = 25;
+var globalCommandOffset = 0;
+
 window.onload = function() {
     head = document.head || document.querySelector('head') || document.getElmentsByTagName('head')[0];
     prepareStyles();
@@ -21,7 +25,7 @@ var updateStyles = function(newStyles) {
     if(highlight)
         hljs.highlightBlock(styleShowEl);
 };
-var enableHightlighting = function() {
+var enableHighlighting = function() {
     highlight = true;
     styleShowEl.classList.add("hljs");
     styleShowEl.classList.add("css");
@@ -44,27 +48,83 @@ var fetchCSS = function(callback) {
     client.send();
 };
 
+var commands = {
+    'HIGH': function(index, callback) {
+        enableHighlighting();
+        hljs.highlightBlock(styleShowEl);
+        callback();
+    },
+    'STOP': function() {
+        // Simply never calls the callback -- execution stops
+    },
+    'PAUSE500': function(index, callback) {
+        setTimeout(callback, 500);
+    },
+    'REMLINE': function(index, callback) {
+        var substr = parsedString.substring(0, index-1);
+        var lineAt = substr.lastIndexOf('\n');
+        var back = function(i) {
+            updateStyles(parsedString.substring(0, i));
+            if(i > lineAt) {
+                setTimeout(function() {
+                    back(i-1);
+                }, charInterval);
+            } else {
+                globalCommandOffset += index - lineAt;
+                var rem = parsedString.split('');
+                rem.splice(lineAt < 0 ? 0 : lineAt, index-lineAt)
+                parsedString = rem.join('');
+                callback(lineAt - index);
+            }
+        };
+        back(index);
+    }
+};
+var commandsToExecute = {};
+
 var parse = function(str) {
     var re = /~cmd:(.*)$/gmi;
     var match;
+    var lengthOffset = 0;
     while((match = re.exec(str)) !== null) {
-        var command = match[1];
+        var fullMatch = match[0];
+        var cmds = match[1].split(',');
         var index = match.index;
-        console.log("Command " + command + " at " + index);
+        console.log("Command " + cmds + " at " + index);
+        commandsToExecute[index-lengthOffset] = cmds;
+        lengthOffset += fullMatch.length;
     }
-    return str.replace(/~cmd.*$/g, '');
+    return str.replace(/~cmd.*$/gmi, '');
 };
 
-var commands = {};
-
 var start = function() {
-    var parsedString = parse(commandString);
+    parsedString = parse(commandString);
     var length = parsedString.length;
     var place = 0;
-    setInterval(function() {
-        if(place < length) {
-            // (commands[place])();
+    var step = function() {
+        if(place >= length) return;
+        var finishFunction = function(indexChange) {
+            if(indexChange) {
+                place += indexChange;
+            }
             updateStyles(parsedString.substring(0, ++place));
+            setTimeout(step, charInterval);
+        };
+        var currentCmdPlace = place+globalCommandOffset; // This prevents early changes to globalCommandOffset from affecting results
+        if(commandsToExecute[currentCmdPlace]) {
+            var exec = function(i, ic) {
+                ic = ic || 0;
+                commands[commandsToExecute[currentCmdPlace][i]](place,
+                        function(indexChange) {
+                            if (commandsToExecute[currentCmdPlace][i+1])
+                                exec(i+1, ic + (indexChange || 0));
+                            else finishFunction(ic + (indexChange || 0));
+                        });
+            };
+            exec(0);
+        } else {
+            finishFunction();
         }
-    }, 50);
+    };
+    step();
 };
